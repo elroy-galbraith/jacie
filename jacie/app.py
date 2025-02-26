@@ -8,26 +8,55 @@ from langchain_google_vertexai import ChatVertexAI
 from langchain.memory import ConversationBufferMemory
 import os
 
-st.title("Jacie")
+st.set_page_config(
+    page_title="Jacie - Financial Assistant",
+    page_icon="💼",
+    layout="wide"
+)
 
-if not os.path.exists("credentials.json"):
-    with open("credentials.json", "w") as f:
-        json.dump(json.loads(st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]), f)
+st.title("Jacie - Your Financial Assistant")
 
-# Set the environment variable to point to the credentials file
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath("credentials.json")
+# Check for credentials
+try:
+    if not os.path.exists("credentials.json"):
+        if "GOOGLE_APPLICATION_CREDENTIALS" not in st.secrets:
+            st.error("🚫 Missing Google Cloud credentials in Streamlit secrets.")
+            st.stop()
+        with open("credentials.json", "w") as f:
+            json.dump(json.loads(st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]), f)
+    
+    # Set the environment variable to point to the credentials file
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath("credentials.json")
+except Exception as e:
+    st.error(f"⚠️ Error setting up credentials: {str(e)}")
+    st.stop()
 
-# Initialize embeddings
-embeddings = VertexAIEmbeddings(model="text-embedding-004")
+# Initialize embeddings with error handling
+try:
+    embeddings = VertexAIEmbeddings(model="text-embedding-004")
+except Exception as e:
+    st.error(f"⚠️ Error initializing embeddings: {str(e)}")
+    st.stop()
 
-# Load the persisted FAISS vector store
-vector_store = FAISS.load_local("vector_store", embeddings, allow_dangerous_deserialization=True)
+# Load the persisted FAISS vector store with error handling
+try:
+    if not os.path.exists("vector_store"):
+        st.error("🚫 Vector store not found. Please ensure the vector store is properly initialized.")
+        st.stop()
+    vector_store = FAISS.load_local("vector_store", embeddings, allow_dangerous_deserialization=True)
+except Exception as e:
+    st.error(f"⚠️ Error loading vector store: {str(e)}")
+    st.stop()
 
 # Create a retriever
 retriever = vector_store.as_retriever(search_kwargs={'k': 6})
 
-# Initialize ChatOpenAI
-llm = ChatVertexAI(model="gemini-1.5-pro", temperature=0)
+# Initialize ChatVertexAI with error handling
+try:
+    llm = ChatVertexAI(model="gemini-1.5-pro", temperature=0)
+except Exception as e:
+    st.error(f"⚠️ Error initializing ChatVertexAI: {str(e)}")
+    st.stop()
 
 # Initialize conversation memory
 if "memory" not in st.session_state:
