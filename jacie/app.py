@@ -106,9 +106,6 @@ async def process_pdf_image(image_path, query):
         chain = image_llm
         result = await chain.ainvoke([message])
         
-        # Log the content of result before parsing
-        st.write(f"Debug: Result content for {image_path}: {result.content}")
-        
         # Check if the content is empty or invalid
         if not result.content:
             st.error(f"⚠️ No content returned for {image_path}.")
