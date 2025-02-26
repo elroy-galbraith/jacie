@@ -6,7 +6,7 @@ authors = ["elroy-galbraith <elroy@yoii.jp>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.14"
 langchain-community = "^0.3.18"
 faiss-cpu = "^1.10.0"
 langchain-google-vertexai = "^2.0.13"
@@ -16,6 +16,11 @@ langchain-text-splitters = "^0.3.6"
 pdfplumber = "^0.11.5"
 fitz = "^0.0.1.dev2"
 watchdog = "^6.0.0"
+img2table = "^1.4.1"
+pandas = "^2.2.3"
+pdf2image = "^1.17.0"
+python-dotenv = "^1.0.1"
+google-cloud-aiplatform = "^1.81.0"
 
 
 [tool.poetry.group.dev.dependencies]

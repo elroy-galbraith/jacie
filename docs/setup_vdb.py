@@ -10,7 +10,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import logging
 import pdfplumber
-
+from pdf2image import convert_from_path
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -43,25 +43,41 @@ vector_store = FAISS(
 # Load documents from all PDFs in the directory
 logger.info("Loading documents from all PDFs in the directory")
 pdf_directory = "docs/pdfs"
+image_output_dir = "docs/pdf_images"
+os.makedirs(image_output_dir, exist_ok=True)
 pdf_files = [f for f in os.listdir(pdf_directory) if f.endswith('.pdf')]
 
 # Split documents
-logger.info("Splitting documents")
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+logger.info("Setting up text splitter")
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500, chunk_overlap=100)
 
+# Load documents
+logger.info("Loading documents")
 documents = []
 for pdf_file in pdf_files:
     logger.info(f"Loading document: {pdf_file}")
-    with pdfplumber.open(os.path.join(pdf_directory, pdf_file)) as pdf:
-        for page_number, page in enumerate(pdf.pages, start=1):
+    pdf_path = os.path.join(pdf_directory, pdf_file)
+    doc_name = os.path.splitext(pdf_file)[0]
+    
+    # Extract images
+    images = convert_from_path(pdf_path, dpi=300)
+    
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_number, (page, img) in enumerate(zip(pdf.pages, images), start=1):
             text = page.extract_text()
             if text:
+                # Save image for the current page
+                img_path = os.path.join(image_output_dir, f"{doc_name}_page_{page_number}.jpg")
+                img.save(img_path, "JPEG")
+                
                 # Create Document object with metadata
                 doc = Document(
                     page_content=text,
                     metadata={
-                        "document_name": pdf_file,
-                        "page_number": page_number
+                        "document_name": doc_name,
+                        "page_number": page_number,
+                        "image": img_path
                     }
                 )
                 documents.append(doc)
@@ -78,5 +94,30 @@ vector_store.add_documents(chunks)
 logger.info("Saving vector store")
 vector_store.save_local("vector_store")
 
+def search_faiss(query, k=3):
+    vector_store = FAISS.load_local("vector_store", embeddings, allow_dangerous_deserialization=True)
+    results = vector_store.similarity_search(query, k=k)
+    
+    retrieved_pages = []
+    for doc in results:
+        retrieved_pages.append({
+            "document": doc.metadata["document_name"],
+            "page": doc.metadata["page_number"],
+            "text": doc.page_content,
+            "image": doc.metadata.get("image", None)  # Retrieve stored image path
+        })
+    
+    return retrieved_pages
+
+# Example query
+query = "How did NCB perform in 2024 compared to 2023?"
+
+logger.info(f"🔍 Searching for: {query}")
+retrieved_results = search_faiss(query)
+
+for res in retrieved_results:
+    logger.info(f"📄 {res['document']} - Page {res['page']}")
+    logger.info(f"🖼 Image Path: {res['image']}")
+    logger.info(f"📝 Text:\n{res['text'][:500]}...\n")
 # Done
 logger.info("Done")

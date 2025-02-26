@@ -141,3 +141,11 @@ Temporary Items
 
 # Google Cloud
 credentials.json
+
+*.jpeg
+*.jpg
+*.png
+*.pdf
+*.txt
+*.json
+*.jsonl
