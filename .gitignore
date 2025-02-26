@@ -111,7 +111,7 @@ dmypy.json
 .streamlit/
 
 # FAISS
-*.faiss
+# *.faiss
 
 # System files
 .DS_Store
