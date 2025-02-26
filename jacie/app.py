@@ -217,7 +217,7 @@ if user_query := st.chat_input("Enter your financial query"):
     # Display results for each image in the sidebar
     with st.sidebar.expander("Source Documents"):
         for result in pdf_analysis_results:
-            st.image(result["image"], caption="Analyzed Page", use_column_width=True)
+            st.image(result["image"], caption="Analyzed Page", use_container_width=True)
 
     # Display intermediate results in an expander
     with st.expander("Intermediate Analysis Results"):
