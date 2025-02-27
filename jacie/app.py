@@ -341,10 +341,15 @@ async def handle_user_query(user_query):
 """
             return summary_text
 
-        # Display Summary Properly
+        # Convert the final summary to speech
+        audio_bytes = text_to_speech(final_summary['Final Summary'])
+
+        # Display the summary and play the audio
         with st.chat_message("assistant"):
             st.markdown(format_summary_output(final_summary), unsafe_allow_html=True)
-            
+            if audio_bytes:
+                st.audio(audio_bytes, format="audio/mp3")
+
         # Add the final summary to the chat history
         st.session_state.messages.append({"role": "assistant", "content": f"**Summary:** {final_summary['Final Summary']}\n\n"
                         f"**Key Takeaways:** {final_summary['Key Takeaways']}\n\n"
