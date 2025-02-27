@@ -12,6 +12,9 @@ from langchain_core.output_parsers import JsonOutputParser
 from fpdf import FPDF
 import functools
 import time
+import speech_recognition as sr
+from gtts import gTTS
+import io
 
 # --- Streamlit UI ---
 st.set_page_config(
@@ -224,6 +227,48 @@ async def enhance_query_with_memory(user_query):
     enhanced_query = await summarization_llm.ainvoke([message])
     return enhanced_query.content if enhanced_query and enhanced_query.content else user_query
 
+# Function for Speech-to-Text
+def speech_to_text():
+    audio_bytes = st.audio_input(
+        label="🎤 Click to record"
+    )
+    if audio_bytes:
+        st.audio(audio_bytes, format="audio/wav")
+        # Read audio bytes into a bytes-like object
+        audio_data = audio_bytes.read()
+        
+        # Save audio bytes to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+            temp_audio.write(audio_data)
+            temp_audio.flush()
+            
+            try:
+                import speech_recognition as sr
+                recognizer = sr.Recognizer()
+                with sr.AudioFile(temp_audio.name) as source:
+                    audio_data = recognizer.record(source)
+                    text = recognizer.recognize_google(audio_data)
+                    return text
+            except Exception as e:
+                st.error(f"❌ Error processing speech: {e}")
+                return None
+            finally:
+                # Clean up temporary file
+                os.unlink(temp_audio.name)
+    return None
+
+# Function for Text-to-Speech
+def text_to_speech(text):
+    try:
+        tts = gTTS(text=text, lang='en')
+        audio_fp = io.BytesIO()
+        tts.write_to_fp(audio_fp)
+        audio_fp.seek(0)
+        return audio_fp
+    except Exception as e:
+        st.error(f"❌ Error generating speech: {e}")
+        return None
+        
 # Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -232,6 +277,11 @@ if "messages" not in st.session_state:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"], unsafe_allow_html=True)
+        if message["role"] == "assistant":
+            # Add a play button for assistant messages
+            audio_bytes = text_to_speech(message["content"])
+            if audio_bytes:
+                st.audio(audio_bytes, format="audio/mp3")
 
 # Define an async function to handle the workflow
 async def handle_user_query(user_query):
@@ -302,8 +352,19 @@ async def handle_user_query(user_query):
         # Update conversation memory with the assistant's response
         st.session_state.memory.save_context({"input": user_query}, {"output": final_summary['Final Summary']})
 
-# Call the async function using asyncio.run() at the top level
-if user_query := st.chat_input("Enter your query"):
+# Chat input and voice input side by side
+col1, col2 = st.columns([4, 1])
+
+with col1:
+    user_query = st.chat_input("Enter your query or use voice input")
+
+with col2:
+    # Record audio directly in the UI
+    spoken_text = speech_to_text()
+    if spoken_text:
+        user_query = spoken_text
+
+if user_query:
     with st.chat_message("user"):
         st.markdown(user_query, unsafe_allow_html=True)
         
