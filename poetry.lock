@@ -794,6 +794,16 @@ pyxnat = "*"
 scipy = "*"
 
 [[package]]
+name = "fpdf"
+version = "1.7.2"
+description = "Simple PDF generation for Python"
+optional = false
+python-versions = "*"
+files = [
+    {file = "fpdf-1.7.2.tar.gz", hash = "sha256:125840783289e7d12552b1e86ab692c37322e7a65b96a99e0ea86cca041b6779"},
+]
+
+[[package]]
 name = "frozenlist"
 version = "1.5.0"
 description = "A list-like structure which implements collections.abc.MutableSequence"
@@ -4947,4 +4957,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.14"
-content-hash = "299c33014fa0b6dbb43f7eb4c1f5c71aadda3216536db261e91fef4d9fb96a08"
+content-hash = "b1c62226021f8640f9a0bc71f15c135a7a4d8f7e7f3b992421d4b5dd309f8d0d"
