@@ -193,6 +193,21 @@ async def summarize_responses(query, responses):
             "Caveats or Uncertainties": "Unable to determine uncertainties."
         }
 
+# --- Initialize Conversation Memory ---
+if "memory" not in st.session_state:
+    st.session_state.memory = ConversationBufferMemory()
+
+# --- Function to Enhance Query with LLM ---
+async def enhance_query_with_memory(user_query):
+    """Enhance the user query using chat history from memory."""
+    # Retrieve chat history from memory
+    chat_history = st.session_state.memory.load_memory_variables({})
+    # Create a message with the user's query and chat history
+    message = HumanMessage(content=f"User Query: {user_query}\nChat History: {chat_history}")
+    # Use an LLM to enhance the query
+    enhanced_query = await summarization_llm.ainvoke([message])
+    return enhanced_query.content if enhanced_query and enhanced_query.content else user_query
+
 # Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -202,17 +217,14 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Accept user input
-if user_query := st.chat_input("Enter your financial query"):
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": user_query})
-    # Display user message in chat message container
-    with st.chat_message("user"):
-        st.markdown(user_query)
+# Define an async function to handle the workflow
+async def handle_user_query(user_query):
+    # Enhance the query using chat history
+    enhanced_query = await enhance_query_with_memory(user_query)
 
-    # Process the user query
+    # Process the enhanced query
     st.write("🔍 Searching for relevant document images...")
-    pdf_analysis_results = asyncio.run(analyze_pdf_images(user_query))
+    pdf_analysis_results = await analyze_pdf_images(enhanced_query)
 
     # Display results for each image in the sidebar
     with st.sidebar.expander("Source Documents"):
@@ -230,7 +242,7 @@ if user_query := st.chat_input("Enter your financial query"):
     # Step 2: Summarize all results
     if pdf_analysis_results:
         st.write("🔍 Generating final summary...")
-        final_summary = asyncio.run(summarize_responses(user_query, pdf_analysis_results))
+        final_summary = await summarize_responses(user_query, pdf_analysis_results)
 
         # Display the final summarized response
         st.write("### Final Answer:")
@@ -240,3 +252,13 @@ if user_query := st.chat_input("Enter your financial query"):
 
         # Add assistant's response to chat history
         st.session_state.messages.append({"role": "assistant", "content": f"**Summary:** {final_summary['Final Summary']}\n**Key Takeaways:** {final_summary['Key Takeaways']}\n**Caveats or Uncertainties:** {final_summary['Caveats or Uncertainties']}"})
+
+        # Update conversation memory with the assistant's response
+        st.session_state.memory.save_context({"input": user_query}, {"output": final_summary['Final Summary']})
+
+# Call the async function using asyncio.run() at the top level
+if user_query := st.chat_input("Enter your financial query"):
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": user_query})
+    st.markdown(user_query)
+    asyncio.run(handle_user_query(user_query))
