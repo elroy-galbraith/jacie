@@ -12,6 +12,9 @@ from langchain_core.output_parsers import JsonOutputParser
 from fpdf import FPDF
 import functools
 import time
+from utils import generate_pdf
+from processing import analyze_pdf_images, summarize_responses
+from initialization import setup_google_credentials
 
 # --- Streamlit UI ---
 st.set_page_config(
@@ -35,20 +38,7 @@ if st.session_state.first_load:
     st.session_state.first_load = False
 
 # --- Google Credentials ---
-try:
-    if "GOOGLE_APPLICATION_CREDENTIALS" not in st.secrets:
-        st.error("🚫 Missing Google Cloud credentials in Streamlit secrets.")
-        st.stop()
-
-    # Create temporary file for credentials
-    with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json") as temp_cred:
-        json.dump(json.loads(st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]), temp_cred)
-        temp_cred_path = temp_cred.name
-
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_cred_path
-except Exception as e:
-    st.error(f"⚠️ Error setting up credentials: {str(e)}")
-    st.stop()
+setup_google_credentials()
 
 # --- Load FAISS Vector Store ---
 try:
@@ -312,35 +302,6 @@ if user_query := st.chat_input("Enter your query"):
     
     # Run the async function using asyncio.run()
     asyncio.run(handle_user_query(user_query))
-
-# --- Function to Generate PDF ---
-def generate_pdf(chat_history, analyses):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-
-    # Add chat history to PDF
-    pdf.cell(200, 10, txt="Chat History:", ln=True, align='L')
-    for message in chat_history:
-        role = "User" if message["role"] == "user" else "Assistant"
-        pdf.multi_cell(0, 10, txt=f"{role}: {message['content']}")
-
-    # Add a separator
-    pdf.cell(200, 10, txt="", ln=True, align='L')
-
-    # Add analyses to PDF
-    pdf.cell(200, 10, txt="Intermediate Analyses:", ln=True, align='L')
-    for analysis in analyses:
-        pdf.multi_cell(0, 10, txt=f"Source: {analysis['image']}")
-        pdf.multi_cell(0, 10, txt=f"Summary: {analysis['analysis']['Summary']}")
-        pdf.multi_cell(0, 10, txt=f"Key Figures: {analysis['analysis']['Key Figures']}")
-        pdf.multi_cell(0, 10, txt=f"Risks: {analysis['analysis']['Risks or Notes']}")
-        pdf.cell(200, 10, txt="", ln=True, align='L')
-
-    # Save PDF to a temporary file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
-        pdf.output(temp_pdf.name)
-        return temp_pdf.name
 
 # --- Add Download Button in Sidebar ---
 if 'pdf_analysis_results' in st.session_state:
