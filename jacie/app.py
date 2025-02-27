@@ -24,10 +24,10 @@ if "first_load" not in st.session_state:
 
 if st.session_state.first_load:
     st.sidebar.info("💡 How to Use:\n\n"
-                    "1️⃣ Enter your **financial query**.\n"
-                    "2️⃣ The system retrieves **relevant financial documents**.\n"
-                    "3️⃣ AI **analyzes the pages** and extracts key insights.\n"
-                    "4️⃣ Get a **structured summary** based on all documents.\n")
+                    "1️⃣ Enter your **financial query**.\n\n"
+                    "2️⃣ The system retrieves **relevant financial documents**.\n\n"
+                    "3️⃣ AI **analyzes the pages** and extracts key insights.\n\n"
+                    "4️⃣ Get a **structured summary** based on all documents.\n\n")
     st.session_state.first_load = False
 
 # --- Google Credentials ---
@@ -96,6 +96,7 @@ IMAGE_PROCESSING_PROMPT = """
     - Summarize only information **relevant** to the query.
     - Extract key financial figures (revenues, costs, profits, etc.).
     - Identify risks, inconsistencies, or missing data.
+    - The response should be a JSON with properly formatted markdown text.
 
     **User Query:** {query}
 
@@ -152,7 +153,7 @@ SUMMARIZATION_PROMPT = """
     - Summarize the **most relevant findings** across all analyzed pages.
     - Ensure your response is **concise, structured, and factual**.
     - **Avoid redundancy** if multiple pages contain the same data.
-
+    - The response should be a JSON with properly formatted markdown text.
     **User Query:** {query}
 
     **Extracted Analyses:**
@@ -214,7 +215,7 @@ if "messages" not in st.session_state:
 # Display chat messages from history on app rerun
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        st.markdown(message["content"], unsafe_allow_html=True)
 
 # Define an async function to handle the workflow
 async def handle_user_query(user_query):
@@ -232,20 +233,45 @@ async def handle_user_query(user_query):
             with col1:
                 st.image(result["image"], caption="Analyzed Page", use_container_width=True)
             with col2:
-                st.write(f"**Summary:** {result['analysis']['Summary']}")
-                st.write(f"**Key Figures:** {result['analysis']['Key Figures']}")
-                st.write(f"**Risks:** {result['analysis']['Risks or Notes']}")
+                st.markdown(f"**Summary:** {result['analysis']['Summary']}")
+                st.markdown(f"**Key Figures:** {result['analysis']['Key Figures']}")
+                st.markdown(f"**Risks:** {result['analysis']['Risks or Notes']}")
 
     # Step 2: Summarize all results
     if pdf_analysis_results:
         st.write("🔍 Generating final summary...")
         final_summary = await summarize_responses(user_query, pdf_analysis_results)
 
-        # Add assistant's response to chat history
+        # Function to escape special characters in text
+        def escape_special_chars(text):
+            if isinstance(text, str):
+                return text.replace("$", r"\$")
+            return text  # If not a string, return as is
+
+        # Function to format the summary output properly
+        def format_summary_output(summary_dict):
+            key_takeaways = summary_dict.get("Key Takeaways", {})
+
+            # Convert dictionary into bullet points with escaped special characters
+            key_takeaways_text = "\n".join([
+                f"- **{escape_special_chars(key)}**: `{escape_special_chars(value)}`" for key, value in key_takeaways.items()
+            ])
+
+            summary_text = f"""
+**📌 Summary:**  
+{escape_special_chars(summary_dict.get("Final Summary", "N/A"))}
+
+**📊 Key Takeaways:**  
+{key_takeaways_text}
+
+**⚠️ Caveats:**  
+{escape_special_chars(summary_dict.get("Caveats or Uncertainties", "N/A"))}
+"""
+            return summary_text
+
+        # Display Summary Properly
         with st.chat_message("assistant"):
-            st.markdown(f"**Summary:** {final_summary['Final Summary']}\n\n"
-                        f"**Key Takeaways:** {final_summary['Key Takeaways']}\n\n"
-                        f"**Caveats:** {final_summary['Caveats or Uncertainties']}")
+            st.markdown(format_summary_output(final_summary), unsafe_allow_html=True)
             
         # Add the final summary to the chat history
         st.session_state.messages.append({"role": "assistant", "content": f"**Summary:** {final_summary['Final Summary']}\n\n"
@@ -257,7 +283,7 @@ async def handle_user_query(user_query):
 # Call the async function using asyncio.run() at the top level
 if user_query := st.chat_input("Enter your query"):
     with st.chat_message("user"):
-        st.markdown(user_query)
+        st.markdown(user_query, unsafe_allow_html=True)
         
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": user_query})
