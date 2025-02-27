@@ -329,6 +329,9 @@ def generate_pdf(chat_history, analyses):
         return temp_pdf.name
 
 # --- Add Download Button in Sidebar ---
-pdf_path = generate_pdf(st.session_state.messages, st.session_state['pdf_analysis_results'])
-with open(pdf_path, "rb") as pdf_file:
-    st.sidebar.download_button(label="Download Report as PDF", data=pdf_file, file_name="report.pdf", mime="application/pdf")
+if 'pdf_analysis_results' in st.session_state:
+    pdf_path = generate_pdf(st.session_state.messages, st.session_state['pdf_analysis_results'])
+    with open(pdf_path, "rb") as pdf_file:
+        st.sidebar.download_button(label="Download Report as PDF", data=pdf_file, file_name="report.pdf", mime="application/pdf")
+else:
+    st.sidebar.info("No analysis results available to download.")
