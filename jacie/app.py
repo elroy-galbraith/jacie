@@ -130,9 +130,9 @@ async def analyze_pdf_images(query):
         st.error("🚫 No relevant document images found.")
         return []
 
-    with st.status("⏳ Processing images...", expanded=True) as status:
+    with st.status("⏳ Searching...", expanded=True) as status:
         results = await asyncio.gather(*[process_pdf_image(img, query) for img in retrieved_images])
-        status.update(label="✅ Image processing complete", state="complete", expanded=False)
+        status.update(label="✅ Search complete", state="complete", expanded=False)
 
     return [res for res in results if res is not None]
 
