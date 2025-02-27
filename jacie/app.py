@@ -10,6 +10,8 @@ from langchain_core.messages import HumanMessage
 from langchain.memory import ConversationBufferMemory
 from langchain_core.output_parsers import JsonOutputParser
 from fpdf import FPDF
+import functools
+import time
 
 # --- Streamlit UI ---
 st.set_page_config(
@@ -110,28 +112,49 @@ IMAGE_PROCESSING_PROMPT = """
     }}
 """
 
+# --- Retry Decorator ---
+def async_retry(max_retries=3, initial_delay=1):
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            delay = initial_delay
+            last_exception = None
+            
+            for attempt in range(max_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        st.warning(f"Attempt {attempt + 1} failed, retrying in {delay} seconds... Error: {str(e)}")
+                        await asyncio.sleep(delay)
+                        delay *= 2  # Exponential backoff
+                    else:
+                        st.error(f"All {max_retries} attempts failed. Last error: {str(e)}")
+            
+            raise last_exception
+        return wrapper
+    return decorator
+
 # --- Async Function to Process a Single Image ---
+@async_retry(max_retries=3, initial_delay=1)
 async def process_pdf_image(image_path, query):
-    """Process an image using Gemini-1.5 Flash."""
+    """Process an image using Gemini-1.5 Flash with retry logic."""
     img_str = encode_image(image_path)
     if img_str is None:
         return None
 
-    try:
-        data_url = f"data:image/png;base64,{img_str}"
-        message = HumanMessage(
-            content=[
-                {"type": "text", "text": IMAGE_PROCESSING_PROMPT.format(query=query)},
-                {"type": "image_url", "image_url": {"url": data_url}},
-            ]
-        )
-        chain = image_llm | JsonOutputParser()  # Directly parse as JSON
-        result = await chain.ainvoke([message])
+    data_url = f"data:image/png;base64,{img_str}"
+    message = HumanMessage(
+        content=[
+            {"type": "text", "text": IMAGE_PROCESSING_PROMPT.format(query=query)},
+            {"type": "image_url", "image_url": {"url": data_url}},
+        ]
+    )
+    chain = image_llm | JsonOutputParser()  # Directly parse as JSON
+    result = await chain.ainvoke([message])
 
-        return {"image": image_path, "analysis": result} if result else None
-    except Exception as e:
-        st.error(f"⚠️ Error processing {image_path}: {str(e)}")
-        return None
+    return {"image": image_path, "analysis": result} if result else None
 
 # --- Async Function to Process Multiple Images ---
 async def analyze_pdf_images(query):
@@ -170,8 +193,9 @@ SUMMARIZATION_PROMPT = """
 """
 
 # --- Function to Summarize Responses ---
+@async_retry(max_retries=3, initial_delay=1)
 async def summarize_responses(query, responses):
-    """Summarize extracted financial insights."""
+    """Summarize extracted financial insights with retry logic."""
     if not responses:
         return {"Final Summary": "No relevant data found.", "Key Takeaways": "", "Caveats or Uncertainties": ""}
 
@@ -180,20 +204,10 @@ async def summarize_responses(query, responses):
     )
 
     message = [HumanMessage(content=SUMMARIZATION_PROMPT.format(query=query, analyses=formatted_responses))]
-
-    try:
-        summary = await summarization_llm.ainvoke(message)
-        summary_content = summary.content if summary and summary.content else "{}"
-        parser = JsonOutputParser()
-        parsed_summary = parser.parse(summary_content)
-        return parsed_summary
-    except Exception as e:
-        st.error(f"⚠️ Error generating summary: {str(e)}")
-        return {
-            "Final Summary": "Error encountered while summarizing.",
-            "Key Takeaways": "No key takeaways available.",
-            "Caveats or Uncertainties": "Unable to determine uncertainties."
-        }
+    chain = summarization_llm | JsonOutputParser()
+    
+    summary = await chain.ainvoke(message)
+    return summary
 
 # --- Initialize Conversation Memory ---
 if "memory" not in st.session_state:
