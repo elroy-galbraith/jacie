@@ -225,18 +225,12 @@ async def handle_user_query(user_query):
     st.write("🔍 Searching for relevant document images...")
     pdf_analysis_results = await analyze_pdf_images(enhanced_query)
 
-    # Display results for each image in the sidebar
-    with st.sidebar.status("📄 Processing relevant financial documents...") as status:
-        for result in pdf_analysis_results:
-            st.image(result["image"], caption="Analyzed Page", use_container_width=True)
-        status.update(label="✅ Processing complete", state="complete", expanded=False)
-
     # Display intermediate results in an expander
     with st.expander("📊 Intermediate Analysis Results"):
         for result in pdf_analysis_results:
             col1, col2 = st.columns([2, 3])
             with col1:
-                st.image(result["image"], caption="Analyzed Page", use_column_width=True)
+                st.image(result["image"], caption="Analyzed Page", use_container_width=True)
             with col2:
                 st.write(f"**Summary:** {result['analysis']['Summary']}")
                 st.write(f"**Key Figures:** {result['analysis']['Key Figures']}")
