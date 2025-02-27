@@ -12,9 +12,8 @@ from langchain_core.output_parsers import JsonOutputParser
 from fpdf import FPDF
 import functools
 import time
-from utils import generate_pdf
-from processing import analyze_pdf_images, summarize_responses
-from initialization import setup_google_credentials
+from jacie.utils import generate_pdf
+from jacie.processing import analyze_pdf_images, summarize_responses
 
 # --- Streamlit UI ---
 st.set_page_config(
@@ -38,7 +37,21 @@ if st.session_state.first_load:
     st.session_state.first_load = False
 
 # --- Google Credentials ---
-setup_google_credentials()
+try:
+    if "GOOGLE_APPLICATION_CREDENTIALS" not in st.secrets:
+        st.error("🚫 Missing Google Cloud credentials in Streamlit secrets.")
+        st.stop()
+
+    # Create temporary file for credentials
+    with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json") as temp_cred:
+        json.dump(json.loads(st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]), temp_cred)
+        temp_cred_path = temp_cred.name
+
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_cred_path
+except Exception as e:
+    st.error(f"⚠️ Error setting up credentials: {str(e)}")
+    st.stop()
+
 
 # --- Load FAISS Vector Store ---
 try:

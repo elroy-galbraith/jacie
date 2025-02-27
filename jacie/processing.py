@@ -2,8 +2,34 @@ import asyncio
 import streamlit as st
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
-from utils import encode_image, async_retry
-from initialization import initialize_llms, load_faiss_vector_store
+from jacie.utils import encode_image, async_retry
+from jacie.initialization import initialize_llms, load_faiss_vector_store
+from jacie.prompts import IMAGE_PROCESSING_PROMPT, SUMMARIZATION_PROMPT
+import functools
+
+# --- Retry Decorator ---
+def async_retry(max_retries=3, initial_delay=1):
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            delay = initial_delay
+            last_exception = None
+            
+            for attempt in range(max_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        st.warning(f"Attempt {attempt + 1} failed, retrying in {delay} seconds... Error: {str(e)}")
+                        await asyncio.sleep(delay)
+                        delay *= 2  # Exponential backoff
+                    else:
+                        st.error(f"All {max_retries} attempts failed. Last error: {str(e)}")
+            
+            raise last_exception
+        return wrapper
+    return decorator
 
 # Initialize LLMs and Vector Store
 image_llm, summarization_llm = initialize_llms()
