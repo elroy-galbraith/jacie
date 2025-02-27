@@ -9,6 +9,7 @@ from langchain_google_vertexai import VertexAIEmbeddings, ChatVertexAI
 from langchain_core.messages import HumanMessage
 from langchain.memory import ConversationBufferMemory
 from langchain_core.output_parsers import JsonOutputParser
+from fpdf import FPDF
 
 # --- Streamlit UI ---
 st.set_page_config(
@@ -27,7 +28,8 @@ if st.session_state.first_load:
                     "1️⃣ Enter your **financial query**.\n\n"
                     "2️⃣ The system retrieves **relevant financial documents**.\n\n"
                     "3️⃣ AI **analyzes the pages** and extracts key insights.\n\n"
-                    "4️⃣ Get a **structured summary** based on all documents.\n\n")
+                    "4️⃣ Get a **structured summary** based on all documents.\n\n"
+                    "5️⃣ Download the **PDF report** with all the details.")
     st.session_state.first_load = False
 
 # --- Google Credentials ---
@@ -226,6 +228,9 @@ async def handle_user_query(user_query):
     st.write("🔍 Searching for relevant document images...")
     pdf_analysis_results = await analyze_pdf_images(enhanced_query)
 
+    # Store pdf_analysis_results in session state
+    st.session_state['pdf_analysis_results'] = pdf_analysis_results
+
     # Display intermediate results in an expander
     with st.expander("📊 Intermediate Analysis Results"):
         for result in pdf_analysis_results:
@@ -253,9 +258,12 @@ async def handle_user_query(user_query):
             key_takeaways = summary_dict.get("Key Takeaways", {})
 
             # Convert dictionary into bullet points with escaped special characters
-            key_takeaways_text = "\n".join([
-                f"- **{escape_special_chars(key)}**: `{escape_special_chars(value)}`" for key, value in key_takeaways.items()
-            ])
+            if isinstance(key_takeaways, dict):
+                key_takeaways_text = "\n".join([
+                    f"- **{escape_special_chars(key)}**: `{escape_special_chars(value)}`" for key, value in key_takeaways.items()
+                ])
+            else:
+                key_takeaways_text = escape_special_chars(key_takeaways)
 
             summary_text = f"""
 **📌 Summary:**  
@@ -290,3 +298,37 @@ if user_query := st.chat_input("Enter your query"):
     
     # Run the async function using asyncio.run()
     asyncio.run(handle_user_query(user_query))
+
+# --- Function to Generate PDF ---
+def generate_pdf(chat_history, analyses):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    # Add chat history to PDF
+    pdf.cell(200, 10, txt="Chat History:", ln=True, align='L')
+    for message in chat_history:
+        role = "User" if message["role"] == "user" else "Assistant"
+        pdf.multi_cell(0, 10, txt=f"{role}: {message['content']}")
+
+    # Add a separator
+    pdf.cell(200, 10, txt="", ln=True, align='L')
+
+    # Add analyses to PDF
+    pdf.cell(200, 10, txt="Intermediate Analyses:", ln=True, align='L')
+    for analysis in analyses:
+        pdf.multi_cell(0, 10, txt=f"Source: {analysis['image']}")
+        pdf.multi_cell(0, 10, txt=f"Summary: {analysis['analysis']['Summary']}")
+        pdf.multi_cell(0, 10, txt=f"Key Figures: {analysis['analysis']['Key Figures']}")
+        pdf.multi_cell(0, 10, txt=f"Risks: {analysis['analysis']['Risks or Notes']}")
+        pdf.cell(200, 10, txt="", ln=True, align='L')
+
+    # Save PDF to a temporary file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+        pdf.output(temp_pdf.name)
+        return temp_pdf.name
+
+# --- Add Download Button in Sidebar ---
+pdf_path = generate_pdf(st.session_state.messages, st.session_state['pdf_analysis_results'])
+with open(pdf_path, "rb") as pdf_file:
+    st.sidebar.download_button(label="Download Report as PDF", data=pdf_file, file_name="report.pdf", mime="application/pdf")
