@@ -68,9 +68,21 @@ for pdf_file in pdf_files:
     pdf_path = os.path.join(pdf_directory, pdf_file)
     doc_name = pdf_file
     company_name = doc_name.split("-")[0]
-    # Extract year from filename, default to "Unknown" if not found
+    
+    # Extract year from filename with validation
     year_match = re.search(r'\d{4}', doc_name)
     year = year_match.group() if year_match else "Unknown"
+    if year != "Unknown":
+        try:
+            year_int = int(year)
+            # Validate year is within reasonable range (e.g., between 1900 and 2100)
+            if year_int < 1900 or year_int > 2100:
+                logger.warning(f"Year {year} outside valid range for document: {doc_name}")
+                year = "Unknown"
+        except ValueError:
+            logger.warning(f"Invalid year format in document: {doc_name}")
+            year = "Unknown"
+    
     logger.info(f"Company name: {company_name}, Year: {year}")
     
     # Extract images
