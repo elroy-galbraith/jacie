@@ -3,7 +3,7 @@ import streamlit as st
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
 from jacie.utils import encode_image, async_retry
-from jacie.initialization import initialize_llms, load_faiss_vector_store
+from jacie.llama_initialization import vision_llm, text_llm, load_faiss_vector_store
 from jacie.prompts import IMAGE_PROCESSING_PROMPT, SUMMARIZATION_PROMPT
 import functools
 
@@ -31,8 +31,7 @@ def async_retry(max_retries=3, initial_delay=1):
         return wrapper
     return decorator
 
-# Initialize LLMs and Vector Store
-image_llm, summarization_llm = initialize_llms()
+# Initialize Vector Store
 vector_store = load_faiss_vector_store()
 
 # --- FAISS Search Function ---
@@ -47,19 +46,19 @@ def search_faiss(query, k=3):
 # --- Async Function to Process a Single Image ---
 @async_retry(max_retries=3, initial_delay=1)
 async def process_pdf_image(image_path, query):
-    """Process an image using Gemini-1.5 Flash with retry logic."""
+    """Process an image using Llama 2 Vision with retry logic."""
     img_str = encode_image(image_path)
     if img_str is None:
         return None
 
-    data_url = f"data:image/png;base64,{img_str}"
-    message = HumanMessage(
-        content=[
-            {"type": "text", "text": IMAGE_PROCESSING_PROMPT.format(query=query)},
-            {"type": "image_url", "image_url": {"url": data_url}},
-        ]
-    )
-    chain = image_llm | JsonOutputParser()  # Directly parse as JSON
+    # Create the message with both text and image
+    message = [
+        {"type": "text", "text": IMAGE_PROCESSING_PROMPT.format(query=query)},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_str}"}}
+    ]
+    
+    # Create and run the chain
+    chain = vision_llm | JsonOutputParser()
     result = await chain.ainvoke([message])
 
     return {"image": image_path, "analysis": result} if result else None
@@ -90,7 +89,7 @@ async def summarize_responses(query, responses):
     )
 
     message = [HumanMessage(content=SUMMARIZATION_PROMPT.format(query=query, analyses=formatted_responses))]
-    chain = summarization_llm | JsonOutputParser()
+    chain = text_llm | JsonOutputParser()
     
     summary = await chain.ainvoke(message)
     return summary 
