@@ -32,75 +32,84 @@ logger.info("Setting up vector store")
 
 # Initialize persistent ChromaDB storage
 DB_PATH = "./chroma_db"
-chroma_client = chromadb.PersistentClient(path=DB_PATH)
+# chroma_client = chromadb.PersistentClient(path=DB_PATH)
 
-# Initialize LangChain's Chroma wrapper
-vector_store = Chroma(
-    client=chroma_client,
-    collection_name="company_docs",
-    embedding_function=embeddings
-)
+# # Initialize LangChain's Chroma wrapper
+# vector_store = Chroma(
+#     client=chroma_client,
+#     collection_name="company_docs",
+#     embedding_function=embeddings
+# )
 
-# Load documents from all PDFs in the directory
-logger.info("Loading documents from all PDFs in the directory")
-pdf_directory = "docs/pdfs"
-image_output_dir = "docs/pdf_images"
-os.makedirs(image_output_dir, exist_ok=True)
-pdf_files = [f for f in os.listdir(pdf_directory) if f.endswith('.pdf')]
+# # Load documents from all PDFs in the directory
+# logger.info("Loading documents from all PDFs in the directory")
+# pdf_directory = "docs/pdfs"
+# image_output_dir = "docs/pdf_images"
+# os.makedirs(image_output_dir, exist_ok=True)
+# pdf_files = [f for f in os.listdir(pdf_directory) if f.endswith('.pdf')]
 
-# Split documents
-logger.info("Setting up text splitter")
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500, chunk_overlap=100)
+# # Split documents
+# logger.info("Setting up text splitter")
+# text_splitter = RecursiveCharacterTextSplitter(
+#     chunk_size=500, chunk_overlap=100)
 
-# Load documents
-logger.info("Loading documents")
-documents = []
-for pdf_file in pdf_files:
-    logger.info(f"Loading document: {pdf_file}")
-    pdf_path = os.path.join(pdf_directory, pdf_file)
-    doc_name = re.split("-", pdf_file)[0]
-    year = re.search(r'\d{4}', doc_name).group()
+# # Load documents
+# logger.info("Loading documents")
+# documents = []
+# for pdf_file in pdf_files:
+#     logger.info(f"Loading document: {pdf_file}")
+#     pdf_path = os.path.join(pdf_directory, pdf_file)
+#     doc_name = re.split("-", pdf_file)[0]
+#     # Extract year from filename, default to "Unknown" if not found
+#     year_match = re.search(r'\d{4}', doc_name)
+#     year = year_match.group() if year_match else "Unknown"
     
-    # Extract images
-    images = convert_from_path(pdf_path, dpi=300)
+#     # Extract images
+#     images = convert_from_path(pdf_path, dpi=300)
     
-    with pdfplumber.open(pdf_path) as pdf:
-        for page_number, (page, img) in enumerate(zip(pdf.pages, images), start=1):
-            text = page.extract_text()
-            if text:
-                # Save image for the current page
-                img_path = os.path.join(image_output_dir, f"{doc_name}_page_{page_number}.jpg")
-                img.save(img_path, "JPEG")
+#     with pdfplumber.open(pdf_path) as pdf:
+#         for page_number, (page, img) in enumerate(zip(pdf.pages, images), start=2):
+#             text = page.extract_text()
+#             if text:
+#                 # Save image for the current page
+#                 img_path = os.path.join(image_output_dir, f"{doc_name}_page_{page_number}.jpg")
+#                 img.save(img_path, "JPEG")
                 
-                # Create Document object with metadata
-                doc = Document(
-                    page_content=text,
-                    metadata={
-                        "company_name": doc_name,
-                        "year": year,
-                        "document_name": doc_name,
-                        "page_number": page_number,
-                        "image": img_path
-                    }
-                )
-                documents.append(doc)
+#                 # Create Document object with metadata
+#                 doc = Document(
+#                     page_content=text,
+#                     metadata={
+#                         "company_name": doc_name,
+#                         "year": year,
+#                         "document_name": doc_name,
+#                         "page_number": page_number,
+#                         "image": img_path
+#                     }
+#                 )
+#                 documents.append(doc)
 
-# Split documents into chunks
-logger.info("Splitting documents into chunks")
-chunks = text_splitter.split_documents(documents)
+# # Split documents into chunks
+# logger.info("Splitting documents into chunks")
+# chunks = text_splitter.split_documents(documents)
 
-# Add documents to vector store
-logger.info("Adding documents to vector store")
-vector_store.add_documents(chunks)
+# # Add documents to vector store
+# logger.info("Adding documents to vector store")
+# vector_store.add_documents(chunks)
 
 # Save vector store
 logger.info("Saving vector store")
-vector_store.save_local("vector_store")
+# ChromaDB automatically persists to disk since we're using PersistentClient
+logger.info("Vector store saved to disk at: " + DB_PATH)
 
-def search_faiss(query, k=3):
-    vector_store = FAISS.load_local("vector_store", embeddings, allow_dangerous_deserialization=True)
-    results = vector_store.similarity_search(query, k=k)
+def search_vector_store(query, k=3, company_name="NCB"):
+    # Load the vector store from disk
+    loaded_vector_store = Chroma(
+        client=chromadb.PersistentClient(path=DB_PATH),
+        collection_name="company_docs",
+        embedding_function=embeddings
+    )
+    results = loaded_vector_store.similarity_search(
+        query, k=k, filter={"company_name": company_name})
     
     retrieved_pages = []
     for doc in results:
@@ -114,10 +123,10 @@ def search_faiss(query, k=3):
     return retrieved_pages
 
 # Example query
-query = "How did NCB perform in 2024 compared to 2023?"
+query = "How did Edufocal perform in 2024 compared to 2023?"
 
 logger.info(f"🔍 Searching for: {query}")
-retrieved_results = search_faiss(query)
+retrieved_results = search_vector_store(query, company_name="EduFocal")
 
 for res in retrieved_results:
     logger.info(f"📄 {res['document']} - Page {res['page']}")
