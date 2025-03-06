@@ -94,7 +94,7 @@ num_images = st.sidebar.slider("Number of images to analyze", 1, 10, 3)  # Defau
 DEFAULT_COMPANY_NAME = st.secrets["DEFAULT_COMPANY_NAME"]
 def get_company_name(query):
     results = company_name_store.similarity_search(query, k=1)
-    company_name = results[0].page_content
+    company_name = results[0].metadata["short_name"]
     st.sidebar.write(f"Company Name: {company_name}")
     return company_name
 
