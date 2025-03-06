@@ -4,7 +4,8 @@ import os
 import asyncio
 import base64
 import tempfile
-from langchain_community.vectorstores import FAISS
+import chromadb
+from langchain_chroma import Chroma
 from langchain_google_vertexai import VertexAIEmbeddings, ChatVertexAI
 from langchain_core.messages import HumanMessage
 from langchain.memory import ConversationBufferMemory
@@ -56,7 +57,11 @@ try:
         st.error("🚫 Vector store not found. Please ensure it is initialized.")
         st.stop()
     embeddings = VertexAIEmbeddings(model="text-embedding-004")
-    vector_store = FAISS.load_local("vector_store", embeddings, allow_dangerous_deserialization=True)
+    loaded_vector_store = Chroma(
+        client=chromadb.PersistentClient(path="./chroma_db"),
+        collection_name="company_docs",
+        embedding_function=embeddings
+    )
 except Exception as e:
     st.error(f"⚠️ Error loading vector store: {str(e)}")
     st.stop()
@@ -82,13 +87,21 @@ def encode_image(image_path):
 # --- FAISS Search Function ---
 num_images = st.sidebar.slider("Number of images to analyze", 1, 10, 3)  # Default is 3
 
-def search_faiss(query, k=num_images):
-    results = vector_store.similarity_search(query, k=k)
-    retrieved_images = [doc.metadata.get("image") for doc in results if doc.metadata.get("image")]
+def search_faiss(query, k=num_images, company_name="NCB"):
+    results = loaded_vector_store.similarity_search(query, k=k, filter={"company_name": company_name})
+    retrieved_images = [
+        {
+            "image": doc.metadata.get("image"),
+            "year": doc.metadata.get("year")
+        } for doc in results if doc.metadata.get("image")
+    ]
+    retrieved_images.sort(key=lambda x: x["year"], reverse=True)
     
-    if not retrieved_images:
+    img_paths = [img["image"] for img in retrieved_images]
+    
+    if not img_paths:
         st.info("ℹ️ No matching documents found. Try refining your query or uploading new financial documents.")
-    return retrieved_images
+    return img_paths
 
 # --- Image Processing Prompt ---
 IMAGE_PROCESSING_PROMPT = """
