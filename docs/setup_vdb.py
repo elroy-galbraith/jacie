@@ -114,11 +114,16 @@ def search_vector_store(query, k=3, company_name="NCB"):
     retrieved_pages = []
     for doc in results:
         retrieved_pages.append({
+            "company": doc.metadata["company_name"],
+            "year": doc.metadata["year"],
             "document": doc.metadata["document_name"],
             "page": doc.metadata["page_number"],
             "text": doc.page_content,
             "image": doc.metadata.get("image", None)  # Retrieve stored image path
         })
+        
+    # Sort retrieved pages by year
+    retrieved_pages.sort(key=lambda x: x["year"])
     
     return retrieved_pages
 
