@@ -51,15 +51,20 @@ except Exception as e:
     st.error(f"⚠️ Error setting up credentials: {str(e)}")
     st.stop()
 
-# --- Load FAISS Vector Store ---
+# --- Load Vector Store ---
 try:
     if not os.path.exists("vector_store"):
         st.error("🚫 Vector store not found. Please ensure it is initialized.")
         st.stop()
     embeddings = VertexAIEmbeddings(model="text-embedding-004")
-    loaded_vector_store = Chroma(
+    document_store = Chroma(
         client=chromadb.PersistentClient(path="./chroma_db"),
         collection_name="company_docs",
+        embedding_function=embeddings
+    )
+    company_name_store = Chroma(
+        client=chromadb.PersistentClient(path="./chroma_db"),
+        collection_name="company_names",
         embedding_function=embeddings
     )
 except Exception as e:
@@ -84,11 +89,15 @@ def encode_image(image_path):
         st.error(f"⚠️ Error encoding image {image_path}: {str(e)}")
         return None
 
-# --- FAISS Search Function ---
+# --- Vector Store Search Function ---
 num_images = st.sidebar.slider("Number of images to analyze", 1, 10, 3)  # Default is 3
+DEFAULT_COMPANY_NAME = st.secrets["DEFAULT_COMPANY_NAME"]
+def get_company_name(query):
+    results = company_name_store.similarity_search(query, k=1)
+    return results[0].page_content
 
-def search_vector_store(query, k=num_images, company_name="NCB"):
-    results = loaded_vector_store.similarity_search(query, k=k, filter={"company_name": company_name})
+def get_document_images(query, k=num_images, company_name=DEFAULT_COMPANY_NAME):
+    results = document_store.similarity_search(query, k=k, filter={"company_name": company_name})
     retrieved_images = [
         {
             "image": doc.metadata.get("image"),
@@ -172,7 +181,9 @@ async def process_pdf_image(image_path, query):
 # --- Async Function to Process Multiple Images ---
 async def analyze_pdf_images(query):
     """Retrieve and process relevant images with the user query."""
-    retrieved_images = search_vector_store(query)
+    # TODO: Enable the retrieval of the company name from the user query and pass it to the search_vector_store function
+    company_name = get_company_name(query)
+    retrieved_images = get_document_images(query, company_name=company_name)
     if not retrieved_images:
         st.info("ℹ️ No matching documents found. Try refining your query or uploading new financial documents.")
         return []
