@@ -94,7 +94,9 @@ num_images = st.sidebar.slider("Number of images to analyze", 1, 10, 3)  # Defau
 DEFAULT_COMPANY_NAME = st.secrets["DEFAULT_COMPANY_NAME"]
 def get_company_name(query):
     results = company_name_store.similarity_search(query, k=1)
-    return results[0].page_content
+    company_name = results[0].page_content
+    st.sidebar.write(f"Company Name: {company_name}")
+    return company_name
 
 def get_document_images(query, k=num_images, company_name=DEFAULT_COMPANY_NAME):
     results = document_store.similarity_search(query, k=k, filter={"company_name": company_name})
@@ -181,7 +183,6 @@ async def process_pdf_image(image_path, query):
 # --- Async Function to Process Multiple Images ---
 async def analyze_pdf_images(query):
     """Retrieve and process relevant images with the user query."""
-    # TODO: Enable the retrieval of the company name from the user query and pass it to the search_vector_store function
     company_name = get_company_name(query)
     retrieved_images = get_document_images(query, company_name=company_name)
     if not retrieved_images:
@@ -261,6 +262,7 @@ for message in st.session_state.messages:
 async def handle_user_query(user_query):
     # Enhance the query using chat history
     enhanced_query = await enhance_query_with_memory(user_query)
+    st.sidebar.write(f"Enhanced Query: {enhanced_query}")
 
     # Process the enhanced query
     st.write("🔍 Searching for relevant document images...")
