@@ -232,7 +232,7 @@ async def enhance_query_with_memory(user_query):
     # Retrieve chat history from memory
     chat_history = st.session_state.memory.load_memory_variables({})
     # Create a message with the user's query and chat history
-    message = HumanMessage(content=f"User Query: {user_query}\nChat History: {chat_history}")
+    message = HumanMessage(content=f"Optimize the user query for RAG consistency with the chat history: \nUser Query: {user_query}\nChat History: {chat_history}")
     # Use an LLM to enhance the query
     enhanced_query = await summarization_llm.ainvoke([message])
     return enhanced_query.content if enhanced_query and enhanced_query.content else user_query
