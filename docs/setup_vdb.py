@@ -4,16 +4,15 @@ import json
 from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
-import faiss
-from langchain_community.docstore.in_memory import InMemoryDocstore
-from langchain_community.vectorstores import FAISS
+import chromadb
+from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import logging
 import pdfplumber
 from pdf2image import convert_from_path
+import re
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 # Set up credentials from Streamlit secrets
 logger.info("Setting up credentials from Streamlit secrets")
@@ -31,13 +30,15 @@ embeddings = VertexAIEmbeddings(model="text-embedding-004")
 # Set up vector store
 logger.info("Setting up vector store")
 
-index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
+# Initialize persistent ChromaDB storage
+DB_PATH = "./chroma_db"
+chroma_client = chromadb.PersistentClient(path=DB_PATH)
 
-vector_store = FAISS(
-    embedding_function=embeddings,
-    index=index,
-    docstore=InMemoryDocstore(),
-    index_to_docstore_id={},
+# Initialize LangChain's Chroma wrapper
+vector_store = Chroma(
+    client=chroma_client,
+    collection_name="company_docs",
+    embedding_function=embeddings
 )
 
 # Load documents from all PDFs in the directory
@@ -58,7 +59,8 @@ documents = []
 for pdf_file in pdf_files:
     logger.info(f"Loading document: {pdf_file}")
     pdf_path = os.path.join(pdf_directory, pdf_file)
-    doc_name = os.path.splitext(pdf_file)[0]
+    doc_name = re.split("-", pdf_file)[0]
+    year = re.search(r'\d{4}', doc_name).group()
     
     # Extract images
     images = convert_from_path(pdf_path, dpi=300)
@@ -75,6 +77,8 @@ for pdf_file in pdf_files:
                 doc = Document(
                     page_content=text,
                     metadata={
+                        "company_name": doc_name,
+                        "year": year,
                         "document_name": doc_name,
                         "page_number": page_number,
                         "image": img_path
