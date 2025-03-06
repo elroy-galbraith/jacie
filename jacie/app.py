@@ -87,7 +87,7 @@ def encode_image(image_path):
 # --- FAISS Search Function ---
 num_images = st.sidebar.slider("Number of images to analyze", 1, 10, 3)  # Default is 3
 
-def search_faiss(query, k=num_images, company_name="NCB"):
+def search_vector_store(query, k=num_images, company_name="NCB"):
     results = loaded_vector_store.similarity_search(query, k=k, filter={"company_name": company_name})
     retrieved_images = [
         {
@@ -172,7 +172,7 @@ async def process_pdf_image(image_path, query):
 # --- Async Function to Process Multiple Images ---
 async def analyze_pdf_images(query):
     """Retrieve and process relevant images with the user query."""
-    retrieved_images = search_faiss(query)
+    retrieved_images = search_vector_store(query)
     if not retrieved_images:
         st.info("ℹ️ No matching documents found. Try refining your query or uploading new financial documents.")
         return []
