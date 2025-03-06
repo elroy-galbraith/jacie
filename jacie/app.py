@@ -12,6 +12,8 @@ from langchain_core.output_parsers import JsonOutputParser
 from fpdf import FPDF
 import functools
 import time
+from jacie.utils import generate_pdf
+from jacie.processing import analyze_pdf_images, summarize_responses
 
 # --- Streamlit UI ---
 st.set_page_config(
@@ -49,6 +51,7 @@ try:
 except Exception as e:
     st.error(f"⚠️ Error setting up credentials: {str(e)}")
     st.stop()
+
 
 # --- Load FAISS Vector Store ---
 try:
@@ -312,35 +315,6 @@ if user_query := st.chat_input("Enter your query"):
     
     # Run the async function using asyncio.run()
     asyncio.run(handle_user_query(user_query))
-
-# --- Function to Generate PDF ---
-def generate_pdf(chat_history, analyses):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-
-    # Add chat history to PDF
-    pdf.cell(200, 10, txt="Chat History:", ln=True, align='L')
-    for message in chat_history:
-        role = "User" if message["role"] == "user" else "Assistant"
-        pdf.multi_cell(0, 10, txt=f"{role}: {message['content']}")
-
-    # Add a separator
-    pdf.cell(200, 10, txt="", ln=True, align='L')
-
-    # Add analyses to PDF
-    pdf.cell(200, 10, txt="Intermediate Analyses:", ln=True, align='L')
-    for analysis in analyses:
-        pdf.multi_cell(0, 10, txt=f"Source: {analysis['image']}")
-        pdf.multi_cell(0, 10, txt=f"Summary: {analysis['analysis']['Summary']}")
-        pdf.multi_cell(0, 10, txt=f"Key Figures: {analysis['analysis']['Key Figures']}")
-        pdf.multi_cell(0, 10, txt=f"Risks: {analysis['analysis']['Risks or Notes']}")
-        pdf.cell(200, 10, txt="", ln=True, align='L')
-
-    # Save PDF to a temporary file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
-        pdf.output(temp_pdf.name)
-        return temp_pdf.name
 
 # --- Add Download Button in Sidebar ---
 if 'pdf_analysis_results' in st.session_state:
