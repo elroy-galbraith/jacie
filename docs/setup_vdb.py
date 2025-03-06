@@ -11,6 +11,10 @@ import logging
 import pdfplumber
 from pdf2image import convert_from_path
 import re
+
+# Add at the top of the file with other constants
+DEFAULT_COMPANY_NAME = "NCB"  # Default company to search if none specified
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -36,8 +40,12 @@ DB_PATH = "./chroma_db"
 # Delete existing database if it exists
 if os.path.exists(DB_PATH):
     logger.info(f"Removing existing database at {DB_PATH}")
-    import shutil
-    shutil.rmtree(DB_PATH)
+    try:
+        import shutil
+        shutil.rmtree(DB_PATH)
+    except Exception as e:
+        logger.error(f"Failed to remove existing database at {DB_PATH}: {e}")
+        raise RuntimeError(f"Could not initialize database: {e}")
 
 chroma_client = chromadb.PersistentClient(path=DB_PATH)
 
@@ -122,7 +130,7 @@ logger.info("Saving vector store")
 # ChromaDB automatically persists to disk since we're using PersistentClient
 logger.info("Vector store saved to disk at: " + DB_PATH)
 
-def search_vector_store(query, k=3, company_name="NCB"):
+def search_vector_store(query, k=3, company_name=DEFAULT_COMPANY_NAME):
     # Load the vector store from disk
     loaded_vector_store = Chroma(
         client=chromadb.PersistentClient(path=DB_PATH),
