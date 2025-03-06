@@ -4,16 +4,19 @@ import json
 from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
-import faiss
-from langchain_community.docstore.in_memory import InMemoryDocstore
-from langchain_community.vectorstores import FAISS
+import chromadb
+from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import logging
 import pdfplumber
 from pdf2image import convert_from_path
+import re
+
+# Add at the top of the file with other constants
+DEFAULT_COMPANY_NAME = "NCB"  # Default company to search if none specified
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 # Set up credentials from Streamlit secrets
 logger.info("Setting up credentials from Streamlit secrets")
@@ -31,13 +34,26 @@ embeddings = VertexAIEmbeddings(model="text-embedding-004")
 # Set up vector store
 logger.info("Setting up vector store")
 
-index = faiss.IndexFlatL2(len(embeddings.embed_query("hello world")))
+# Initialize persistent ChromaDB storage
+DB_PATH = "./chroma_db"
 
-vector_store = FAISS(
-    embedding_function=embeddings,
-    index=index,
-    docstore=InMemoryDocstore(),
-    index_to_docstore_id={},
+# Delete existing database if it exists
+if os.path.exists(DB_PATH):
+    logger.info(f"Removing existing database at {DB_PATH}")
+    try:
+        import shutil
+        shutil.rmtree(DB_PATH)
+    except Exception as e:
+        logger.error(f"Failed to remove existing database at {DB_PATH}: {e}")
+        raise RuntimeError(f"Could not initialize database: {e}")
+
+chroma_client = chromadb.PersistentClient(path=DB_PATH)
+
+# Initialize LangChain's Chroma wrapper
+vector_store = Chroma(
+    client=chroma_client,
+    collection_name="company_docs",
+    embedding_function=embeddings
 )
 
 # Load documents from all PDFs in the directory
@@ -58,13 +74,30 @@ documents = []
 for pdf_file in pdf_files:
     logger.info(f"Loading document: {pdf_file}")
     pdf_path = os.path.join(pdf_directory, pdf_file)
-    doc_name = os.path.splitext(pdf_file)[0]
+    doc_name = pdf_file
+    company_name = doc_name.split("-")[0]
+    
+    # Extract year from filename with validation
+    year_match = re.search(r'\d{4}', doc_name)
+    year = year_match.group() if year_match else "Unknown"
+    if year != "Unknown":
+        try:
+            year_int = int(year)
+            # Validate year is within reasonable range (e.g., between 1900 and 2100)
+            if year_int < 1900 or year_int > 2100:
+                logger.warning(f"Year {year} outside valid range for document: {doc_name}")
+                year = "Unknown"
+        except ValueError:
+            logger.warning(f"Invalid year format in document: {doc_name}")
+            year = "Unknown"
+    
+    logger.info(f"Company name: {company_name}, Year: {year}")
     
     # Extract images
     images = convert_from_path(pdf_path, dpi=300)
     
     with pdfplumber.open(pdf_path) as pdf:
-        for page_number, (page, img) in enumerate(zip(pdf.pages, images), start=1):
+        for page_number, (page, img) in enumerate(zip(pdf.pages, images), start=2):
             text = page.extract_text()
             if text:
                 # Save image for the current page
@@ -75,6 +108,8 @@ for pdf_file in pdf_files:
                 doc = Document(
                     page_content=text,
                     metadata={
+                        "company_name": company_name,
+                        "year": year,
                         "document_name": doc_name,
                         "page_number": page_number,
                         "image": img_path
@@ -92,31 +127,43 @@ vector_store.add_documents(chunks)
 
 # Save vector store
 logger.info("Saving vector store")
-vector_store.save_local("vector_store")
+# ChromaDB automatically persists to disk since we're using PersistentClient
+logger.info("Vector store saved to disk at: " + DB_PATH)
 
-def search_faiss(query, k=3):
-    vector_store = FAISS.load_local("vector_store", embeddings, allow_dangerous_deserialization=True)
-    results = vector_store.similarity_search(query, k=k)
+def search_vector_store(query, k=3, company_name=DEFAULT_COMPANY_NAME):
+    # Load the vector store from disk
+    loaded_vector_store = Chroma(
+        client=chromadb.PersistentClient(path=DB_PATH),
+        collection_name="company_docs",
+        embedding_function=embeddings
+    )
+    results = loaded_vector_store.similarity_search(
+        query, k=k, filter={"company_name": company_name})
     
     retrieved_pages = []
     for doc in results:
         retrieved_pages.append({
+            "company": doc.metadata["company_name"],
+            "year": doc.metadata["year"],
             "document": doc.metadata["document_name"],
             "page": doc.metadata["page_number"],
             "text": doc.page_content,
             "image": doc.metadata.get("image", None)  # Retrieve stored image path
         })
+        
+    # Sort retrieved pages by year
+    retrieved_pages.sort(key=lambda x: x["year"], reverse=True)
     
     return retrieved_pages
 
 # Example query
-query = "How did NCB perform in 2024 compared to 2023?"
+query = "How did Edufocal perform?"
 
 logger.info(f"🔍 Searching for: {query}")
-retrieved_results = search_faiss(query)
+retrieved_results = search_vector_store(query, company_name="EduFocal")
 
 for res in retrieved_results:
-    logger.info(f"📄 {res['document']} - Page {res['page']}")
+    logger.info(f"📄 {res['document']} ({res['year']}) - Page {res['page']}")
     logger.info(f"🖼 Image Path: {res['image']}")
     logger.info(f"📝 Text:\n{res['text'][:500]}...\n")
 # Done
